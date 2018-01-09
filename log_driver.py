@@ -116,6 +116,18 @@ def Main():
 
     if number is 2:
         print('This functionality is under construction\n')
+        
+        data = read_telemetry_csv(filename)
+        #TODO set a datetime object that is the first entry in the log
+        datetime_start = data[0][0]
+        for row in data:
+            seconds_elapsed = datetime_start - row[0] # FIXME this seems to fail?
+            altitude = row[3]
+            
+            # FIXME not sure if the update function will make any sense in the way I'm using it?
+            # passing in elapsed seconds instead of the timestamp?
+            # maybe do the datetime_start and seconds elapsed within the update function?
+            
     if number is 3:
         print('This functionality is under construction\n')
     if number is 4:

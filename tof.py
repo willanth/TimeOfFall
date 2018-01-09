@@ -9,7 +9,7 @@ from datetime import datetime
 from datetime import time
 from datetime import timedelta
 
-import scipy as sp
+from scipy.interpolate import interp1d
 import numpy as np
 
 class TimeOfFlight:
@@ -140,6 +140,8 @@ class TimeOfFlight:
 
         Performs an unsophisticated "at this rate" time of fall calculation.
         """
+        
+        # TODO:  Exception Handling, and evaluate the output this vs the known time from the logfile
         epsilon = 1e-3
         vel = delta_alt / delta_t.total_seconds()
         if vel < epsilon:
