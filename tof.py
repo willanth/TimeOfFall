@@ -9,8 +9,9 @@ from datetime import datetime
 from datetime import time
 from datetime import timedelta
 
-from scipy.interpolate import interp1d
 import numpy as np
+from scipy.interpolate import InterpolatedUnivariateSpline
+import matplotlib.pyplot as plt
 
 class TimeOfFlight:
     'Provides an abstracted method of calculating payload time to landing'
@@ -42,18 +43,18 @@ class TimeOfFlight:
         self.ttl_valid = False
         self.freefall_state = False
         self.freefall_count = 0
+        self.telem_list = []
 
 
 
-    def update(self, timestamp, altitude, landingalt = 0):
+    def update(self, upd_sent, landingalt = 0):
 
         """
         Performs a state update on the class object, prompting calculations and
         update of the output variable.
 
         Inputs:
-            Timestamp of update (datetime object)
-            Altitude of payload (meters)
+            List of telemetry information from the payload in Jessop Format
             Altitude of predicted landing site (meters)
 
         Outputs:
@@ -61,38 +62,44 @@ class TimeOfFlight:
             Boolean False (if update invalid)
 
         """
+        
+        # TODO as new update sentances are passed in, append them to the update
+        # list so that the algorithms have access to historical data
+        self.telem_list.append(upd_sent)
+        
+        # if there is only one entry in the list (new object) set timestamp
+        if len(self.telem_list) == 1:
+            self.timestamp = self.telem_list[0][0]
 
-        altitude_new = altitude
-        timestamp_new = timestamp
-
-        # FIXME detect first update and set base datetime object to be that, to avoid *huge* timedeltas from default
 
         #update the MSL altitude of predicted landing site if it changes
         if landingalt is not self.landingalt:
             self.landingalt = landingalt
 
         #check if the timestamps / altitudes are ordered.  If not, discard update
-        if timestamp_new < self.timestamp:
+        if upd_sent[0] < self.timestamp:
             print('failed timestamp check')
             return False
 
-        self.freefall_state = self._freefall_detection(altitude_new)
+        self.freefall_state = self._freefall_detection(upd_sent[3])
 
         if self.freefall_state is False:    # changed this to freefall state check
             print('Not in freefall')
+            self.ttl_valid = False
             return False
 
         # should only execute if we are in freefall
-        
+        # TODO rewrite this as we now have a historical list of every telem        
         print('In freefall')
-        delta_alt = abs(self.altitude - altitude_new)
-        delta_t = abs(timestamp_new - self.timestamp)
+        delta_alt = abs(self.altitude - upd_sent[3])
+        delta_t = abs(upd_sent[0] - self.timestamp)
 
         #set update values as object state variables
-        self.altitude = altitude_new
-        self.timestamp = timestamp_new
+        self.altitude = upd_sent[3]
+        self.timestamp = upd_sent[0]
 
         fall_time = self._rawFalltime(delta_t, delta_alt, self.landingalt)
+        self.ttl_valid = True
         #cubicFallTime = _rateOfDecentCubic()
 
         return fall_time
@@ -128,9 +135,30 @@ class TimeOfFlight:
         """
         falltime = None #safely initialize return variable
 
-        #Calculate cubic spline function, with natural endpoints
+        # TODO run the fit and plot script on the data fields every n seconds to observe the function change
+        # use fitpack2 method
+        
+        #initialize new lists because I'm not sure what I want to do with this yet
+        x = []
+        y = []
 
-        #Perform extrapolation to determine time at landing
+        # x axis is t in seconds *since launch/first packet*
+        # y axis is altitude
+        # TODO yes I know this will be computationally expensive for no reason but it's progress
+        for row in self.telem_list:
+            x.append(timedelta.total_seconds(abs(self.telem_list[0][0] - row[0])))
+            y.append(row[3])
+
+        spline = InterpolatedUnivariateSpline(x, y)
+        # Now extrapolate
+
+        # Now find the value at which the function reaches the estimated landing altitude
+        # Suggest Bisection ( O(log n) ) or Secant variant of Newton-Raphson 
+
+        # TODO plot is only for debug
+        plt.subplot(2, 1, 1)
+        plt.plot(x, y, 'bo')
+        plt.title('Interpolation using univariate spline')
 
         return falltime
 
@@ -140,8 +168,9 @@ class TimeOfFlight:
 
         Performs an unsophisticated "at this rate" time of fall calculation.
         """
-        
-        # TODO:  Exception Handling, and evaluate the output this vs the known time from the logfile
+
+        # TODO: Exception Handling, and evaluate the output this vs the known time from the logfile
+        # TODO: Some kind of weighted averaging?  Lots of jitter sample-to-sample
         epsilon = 1e-3
         vel = delta_alt / delta_t.total_seconds()
         if vel < epsilon:
@@ -151,7 +180,7 @@ class TimeOfFlight:
             fall_dist = self.altitude - landing_alt
             falltime = fall_dist / vel
             return falltime
-        
+
         print('payload below estimated landing altitude')
         return 0
 

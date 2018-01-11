@@ -14,6 +14,8 @@ import traceback
 import tof
 import sys
 
+from datetime import timedelta
+
 def read_telemetry_csv(filename,
     datetime_field = 0, 
     latitude_field = 3, 
@@ -82,14 +84,14 @@ def Main():
     filename = "20171226-232020_M2913209_RS92_401520.log"
     #filename = sys.argv[1]  # FIXME hardcoded this with a filename when running in Spyder
 
-    #print(read_telemetry_csv(filename))
     track1 = tof.TimeOfFlight()
+    data = read_telemetry_csv(filename)
 
     print('\n\n')
     print('Using this data:')
     print('Choose from the following options:\n')
     print('1: Perform simple (velocity based) Time-to-Fall calculation\n')
-    print('2: Perform cubic spline interpolation -> simple extrapolation\n')
+    print('2: Perform spline interpolation -> simple extrapolation\n')
     print('3: Perform atmospheric density based calculation\n')
     print('4: Perform multi-method Kalman filtered state prediction (wow!)\n')
 
@@ -97,18 +99,12 @@ def Main():
         number = int(input('Choice: ')) #I'm sure there's a better way than casting?
     except:
         traceback.print_exc()
-        
-    # TODO File IO should be done using threading and async file IO
 
     if number is 1:
         print('This functionality is under construction\n')
-        data = read_telemetry_csv(filename)
         for row in data:
-            dt = row[0]
-            alt = row[3]
             
-            #print(str(dt) +' '+str(alt))
-            falltime = track1.update(dt, alt, landingalt)
+            falltime = track1.update(row, landingalt)
             print(falltime)
             
         print('Payload landed')
@@ -117,11 +113,13 @@ def Main():
     if number is 2:
         print('This functionality is under construction\n')
         
-        data = read_telemetry_csv(filename)
         #TODO set a datetime object that is the first entry in the log
         datetime_start = data[0][0]
+        data_iter = iter(data)
+        
+        # TODO consider using an iterator here as you simply have to call next(data_iter)
         for row in data:
-            seconds_elapsed = datetime_start - row[0] # FIXME this seems to fail?
+            seconds_elapsed = timedelta.total_seconds(abs(datetime_start - row[0]))
             altitude = row[3]
             
             # FIXME not sure if the update function will make any sense in the way I'm using it?
@@ -132,8 +130,6 @@ def Main():
         print('This functionality is under construction\n')
     if number is 4:
         print('This functionality is under construction\n')
-
-    #call .join() to close threads out after file IO
 
 
 if __name__ == '__main__':
