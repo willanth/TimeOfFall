@@ -6,7 +6,7 @@ Created on Thu Dec 28 13:21:34 2017
 
 """
 from datetime import datetime
-from datetime import time
+#from datetime import time
 from datetime import timedelta
 
 import numpy as np
@@ -47,7 +47,7 @@ class TimeOfFlight:
 
 
 
-    def update(self, upd_sent, landingalt = 0):
+    def update(self, upd_sent, landingalt = 0, method = 1):
 
         """
         Performs a state update on the class object, prompting calculations and
@@ -65,7 +65,7 @@ class TimeOfFlight:
         
         # TODO as new update sentances are passed in, append them to the update
         # list so that the algorithms have access to historical data
-        self.telem_list.append(upd_sent)
+        
         
         # if there is only one entry in the list (new object) set timestamp
         if len(self.telem_list) == 1:
@@ -89,8 +89,9 @@ class TimeOfFlight:
             return False
 
         # should only execute if we are in freefall
-        # TODO rewrite this as we now have a historical list of every telem        
         print('In freefall')
+        # only log frames after burst detection fires, we don't care about before that
+        self.telem_list.append(upd_sent)
         delta_alt = abs(self.altitude - upd_sent[3])
         delta_t = abs(upd_sent[0] - self.timestamp)
 
@@ -98,9 +99,14 @@ class TimeOfFlight:
         self.altitude = upd_sent[3]
         self.timestamp = upd_sent[0]
 
-        fall_time = self._rawFalltime(delta_t, delta_alt, self.landingalt)
-        self.ttl_valid = True
-        #cubicFallTime = _rateOfDecentCubic()
+        if method == 1:
+            
+            fall_time = self._rawFalltime(delta_t, delta_alt, self.landingalt)
+            self.ttl_valid = True
+            
+        elif method == 2:
+            
+            fall_time = self._rateOfDecentCubic()
 
         return fall_time
 
@@ -135,31 +141,38 @@ class TimeOfFlight:
         """
         falltime = None #safely initialize return variable
 
-        # TODO run the fit and plot script on the data fields every n seconds to observe the function change
-        # use fitpack2 method
-        
         #initialize new lists because I'm not sure what I want to do with this yet
-        x = []
-        y = []
-
-        # x axis is t in seconds *since launch/first packet*
-        # y axis is altitude
-        # TODO yes I know this will be computationally expensive for no reason but it's progress
+        delta_seconds = []
+        alt = []
+        
+        # FIXME this is getting time and altitude information PRE BURST which is not helpful
         for row in self.telem_list:
-            x.append(timedelta.total_seconds(abs(self.telem_list[0][0] - row[0])))
-            y.append(row[3])
-
-        spline = InterpolatedUnivariateSpline(x, y)
-        # Now extrapolate
+            delta_seconds.append(timedelta.total_seconds(abs(self.telem_list[0][0] - row[0])))
+            alt.append(row[3])
+            
+        xi = np.array(delta_seconds)
+        yi = np.array(alt)
+        # positions to inter/extrapolate
+        x = np.linspace(0, len(delta_seconds), len(delta_seconds))
+        # spline order: 1 linear, 2 quadratic, 3 cubic ... 
+        order = 3
+        # do inter/extrapolation
+        s = InterpolatedUnivariateSpline(xi, yi, k=order)
+        y = s(x)
 
         # Now find the value at which the function reaches the estimated landing altitude
         # Suggest Bisection ( O(log n) ) or Secant variant of Newton-Raphson 
+        
+        # TODO solving for x given y?  Easy solution is what happens at f(x)=0 as that root will be time t
 
-        # TODO plot is only for debug
-        plt.subplot(2, 1, 1)
-        plt.plot(x, y, 'bo')
-        plt.title('Interpolation using univariate spline')
-
+        # plot is only for debug!
+        plt.figure()
+        plt.plot(xi, yi)
+        s = InterpolatedUnivariateSpline(xi, yi, k=order)
+        y = s(x)
+        plt.plot(x, y)
+        plt.show()
+        
         return falltime
 
     def _rawFalltime(self, delta_t, delta_alt, landing_alt):
@@ -193,9 +206,18 @@ class TimeOfFlight:
         data (curve fitting to payload decent data logs)
         """
 
-        falltime = None
-
-        return falltime
+        pass
+    
+    def _rateOfDecentKalman(self):
+        """
+        Private (internal) function of the class object.
+        
+        Uses a recursive state prediction algorithm (notionally Kalman) to 
+        project a state vector.  As we get quite a few samples it should 
+        converge well?
+        """
+        
+        pass
 
 def Main():
     print('Class run standalone')

@@ -3,9 +3,10 @@
 """
 Created on Thu Dec 28 19:15:34 2017
 
-@author: Mark Jessop
 @author: Will Anthony
 
+Some portions of the driver code written and provided by Mark Jessop, VK5QI 
+from the 'projecthorus' project codebase
 """
 
 import datetime
@@ -23,6 +24,8 @@ def read_telemetry_csv(filename,
     altitude_field = 5, 
     delimiter=','):
     '''
+    This function written/provided by Mark Jessop VK5QI
+    
     Read in a Telemetry CSV file.
     Fields to use can be set as arguments to this function.
     By default we maintain compatability with the log files output by radiosonde_auto_rx, as they are good sources
@@ -104,7 +107,7 @@ def Main():
         print('This functionality is under construction\n')
         for row in data:
             
-            falltime = track1.update(row, landingalt)
+            falltime = track1.update(row, landingalt, 1)
             print(falltime)
             
         print('Payload landed')
@@ -113,18 +116,14 @@ def Main():
     if number is 2:
         print('This functionality is under construction\n')
         
-        #TODO set a datetime object that is the first entry in the log
-        datetime_start = data[0][0]
-        data_iter = iter(data)
         
         # TODO consider using an iterator here as you simply have to call next(data_iter)
         for row in data:
-            seconds_elapsed = timedelta.total_seconds(abs(datetime_start - row[0]))
-            altitude = row[3]
+            falltime = track1.update(row, landingalt, 2)
+            print(falltime)
             
-            # FIXME not sure if the update function will make any sense in the way I'm using it?
-            # passing in elapsed seconds instead of the timestamp?
-            # maybe do the datetime_start and seconds elapsed within the update function?
+        print('Payload landed')
+            
             
     if number is 3:
         print('This functionality is under construction\n')
