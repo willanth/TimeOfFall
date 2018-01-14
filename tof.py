@@ -44,6 +44,7 @@ class TimeOfFlight:
         self.freefall_state = False
         self.freefall_count = 0
         self.telem_list = []
+        self.burst_time = None
 
 
 
@@ -56,42 +57,36 @@ class TimeOfFlight:
         Inputs:
             List of telemetry information from the payload in Jessop Format
             Altitude of predicted landing site (meters)
+            Time of Flight calculation method
 
         Outputs:
             Datetime object (if update valid)
             Boolean False (if update invalid)
 
         """
+        #check if the timestamps / altitudes are ordered.  If not, discard update
+        if upd_sent[0] < self.timestamp:
+            print('failed timestamp check')
+            return False
         
-        # TODO as new update sentances are passed in, append them to the update
-        # list so that the algorithms have access to historical data
-        
-        
+        self.telem_list.append(upd_sent)
         # if there is only one entry in the list (new object) set timestamp
         if len(self.telem_list) == 1:
             self.timestamp = self.telem_list[0][0]
-
 
         #update the MSL altitude of predicted landing site if it changes
         if landingalt is not self.landingalt:
             self.landingalt = landingalt
 
-        #check if the timestamps / altitudes are ordered.  If not, discard update
-        if upd_sent[0] < self.timestamp:
-            print('failed timestamp check')
-            return False
-
-        self.freefall_state = self._freefall_detection(upd_sent[3])
-
         if self.freefall_state is False:    # changed this to freefall state check
             print('Not in freefall')
             self.ttl_valid = False
+            self.freefall_state = self._freefall_detection(upd_sent)
             return False
 
         # should only execute if we are in freefall
         print('In freefall')
         # only log frames after burst detection fires, we don't care about before that
-        self.telem_list.append(upd_sent)
         delta_alt = abs(self.altitude - upd_sent[3])
         delta_t = abs(upd_sent[0] - self.timestamp)
 
@@ -107,27 +102,37 @@ class TimeOfFlight:
         elif method == 2:
             
             fall_time = self._rateOfDecentCubic()
+            self.ttl_valid = True
 
         return fall_time
 
-    def _freefall_detection(self, altitude):
+    def _freefall_detection(self, telem_frame):
         """
         Private (internal) function of the class object.
 
         Perfoms a very rudimentary freefall detection based on altitude deltas
+        
         """
-
-        if self.freefall_count >= 3:
+        if isinstance(telem_frame[3], float) is False:    #A cave-dwelling typecheck
+            return False
+        
+        if self.freefall_state is True: #in case we are accidentally called having already triggered
+            return True
+        
+        if self.freefall_count < -4:
+            self.burst_time = telem_frame[0]
             return True
 
-        if altitude > self.altitude:
-            self.altitude = altitude
+        if telem_frame[3] > self.altitude:
+            self.altitude = telem_frame[3]
+            if self.freefall_count < 10:
+                self.freefall_count += 1
+            
             return False
 
-        if self.altitude > altitude:
-            self.freefall_count += 1
-
-
+        if self.altitude > telem_frame[3]:
+            self.freefall_count -= 1
+            return False
 
 
     def _rateOfDecentCubic(self):
@@ -144,10 +149,9 @@ class TimeOfFlight:
         #initialize new lists because I'm not sure what I want to do with this yet
         delta_seconds = []
         alt = []
-        
-        # FIXME this is getting time and altitude information PRE BURST which is not helpful
+
         for row in self.telem_list:
-            delta_seconds.append(timedelta.total_seconds(abs(self.telem_list[0][0] - row[0])))
+            delta_seconds.append(timedelta.total_seconds(abs(self.burst_time - row[0])))
             alt.append(row[3])
             
         xi = np.array(delta_seconds)
@@ -155,7 +159,7 @@ class TimeOfFlight:
         # positions to inter/extrapolate
         x = np.linspace(0, len(delta_seconds), len(delta_seconds))
         # spline order: 1 linear, 2 quadratic, 3 cubic ... 
-        order = 3
+        order = 2
         # do inter/extrapolation
         s = InterpolatedUnivariateSpline(xi, yi, k=order)
         y = s(x)
