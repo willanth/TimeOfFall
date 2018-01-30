@@ -64,6 +64,10 @@ class TimeOfFlight:
             Boolean False (if update invalid)
 
         """
+        # bail on an invalid or corrupted telem sentance 
+        if self._validateTelemetry is False:
+            return False
+        
         #check if the timestamps / altitudes are ordered.  If not, discard update
         if upd_sent[0] < self.timestamp:
             print('failed timestamp check')
@@ -151,6 +155,7 @@ class TimeOfFlight:
         alt = []
 
         for row in self.telem_list:
+            #FIXME crashes as the datetime value may be Null/None as telem_list isn't being appended correctly
             delta_seconds.append(timedelta.total_seconds(abs(self.burst_time - row[0])))
             alt.append(row[3])
             
@@ -159,7 +164,7 @@ class TimeOfFlight:
         # positions to inter/extrapolate
         x = np.linspace(0, len(delta_seconds), len(delta_seconds))
         # spline order: 1 linear, 2 quadratic, 3 cubic ... 
-        order = 2
+        order = 3
         # do inter/extrapolation
         s = InterpolatedUnivariateSpline(xi, yi, k=order)
         y = s(x)
@@ -222,7 +227,33 @@ class TimeOfFlight:
         """
         
         pass
+    
+    def _validateTelemetry(self, update_sentance):
+        """
+        Private (internal) function of the class object.
 
+        Checks the telemetry sentance for corruption or missing entries.
+
+        Inputs:
+            Telemetry sentance in Jessop Format
+            
+        Outputs:
+            Boolean
+        """
+        
+        # cursory length check
+        if len(update_sentance) < 9:
+            return False
+
+        # altitude should be positive at all times
+        if update_sentance[5] < 0:
+            return False
+        
+        # datetime should not be null / corrupted
+        if isinstance(update_sentance[0], datetime):
+            pass
+        
+        
 def Main():
     print('Class run standalone')
 
